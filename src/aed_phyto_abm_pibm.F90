@@ -619,6 +619,16 @@ SUBROUTINE aed_particle_bgc_phyto_abm( data,column,layer_idx,ppid,p )
    P_Limitation=0.8  !limitation by P
    D0= p%ptm_env(DIAM) !10.  !initial size
 
+   ! CODE FROM PIBM CONVERTING BETWEEN CARBON, VOLUME, ESD
+   ! the PHY_C2Vol function is in aed_pibm_utils
+   ! Cdiv is a parameter set by the user and is found in variables.f90 in PIBM code
+   !Convert phytoplankton CDiv to Volume:
+   !Vol = PHY_C2Vol(CDiv)
+   !
+   !Convert Volume to ESD:
+   !ESD_ = (6.d0*Vol/pi)**0.3333333  
+   ! END PIBM CODE
+
    ! Local environmental conditions in this layer
    WaterTemperature= _STATE_VAR_(data%id_tem) !22  !water temperature
    Depth     = _STATE_VAR_S_(data%id_dep) -  _PTM_ENV_(HGHT)  !cyanobacteria depth = water depth-cell height
@@ -640,6 +650,10 @@ SUBROUTINE aed_particle_bgc_phyto_abm( data,column,layer_idx,ppid,p )
    print *,'p%ptm_istat(PTID),',p%ptm_istat(PTID)
 
    IF( status == 0 ) RETURN
+
+   ! THIS IS WHERE WE COULD INSERT BIO FUNCTIONS FROM PIBM
+   ! SEE PIBM FILE GMK98_Ind_TempSizeLight.F90 for example code
+   ! functions are already in this repo in aed_pibm_utils
 
    ! Net photosynthesis of cells
    f_T = exp(-((WaterTemperature - 22.) / 5.)**2) ! %temperature limitation term
@@ -681,6 +695,74 @@ SUBROUTINE aed_particle_bgc_phyto_abm( data,column,layer_idx,ppid,p )
 
    ! Update particle bouyancy, changing with age
    p%ptm_env(VVEL) = -1.0/86400.
+
+! PIBM CODE FOR PARTICLE DIVISION AND ASSIGNMENT OF NEW TRAITS
+! from the Par2PHY.f90 file - this file also computes trait covariances
+! so we can grab that code too if desired
+   !loop through all super-individuals to convert into Eulerian concentrations
+!DO i = 1, N_PAR
+!   ipar = p_PHY(i)%iz  !The current grid of super-individual i
+!   !Handle cell division and mutation
+!   ! If cellular carbon is above the division threshold, it divides
+!   IF (p_PHY(i)%C >= p_PHY(i)%Cdiv) THEN  !Divide
+!      N_birth(ipar)= N_birth(ipar) + 1
+!      p_PHY(i)%C   = p_PHY(i)%C/2d0
+!      p_PHY(i)%N   = p_PHY(i)%N/2d0
+!      p_PHY(i)%Chl = p_PHY(i)%Chl/2d0
+!      p_PHY(i)%num = p_PHY(i)%num*2d0
+!
+!      !Mutation
+!
+!      If (NTrait > 0) Then
+!         DO m = 1, NTrait
+!            nu_ = p_PHY(i)%num*nu(m)
+!            call random_number(cff)
+!
+!            IF (cff < nu_) THEN !Mutation occurs
+!               N_mutate(ipar) = N_mutate(ipar) + 1
+!
+!               select case(m)
+!               case(iTopt)
+!                   oldtt(1) = p_PHY(i)%Topt
+!               case(iSize)
+!                   oldtt(1) = log(p_PHY(i)%CDiv)
+!               case(ialphaChl)
+!                   oldtt(1) = p_PHY(i)%LnalphaChl
+!               case DEFAULT
+!                   stop "Trait index wrong!"
+!               end select
+!   
+!               vartt(1,1)= sigma(m)**2   !Construct the covariance matrix for the selected trait
+!   
+!               !A new Topt is randomly sampled from a Gaussian distribution with mean of previous Topt and SD of sigma
+!               newtt = srand_mtGaus(1, oldtt, vartt)
+!               select case(m)
+!               case(iTopt)
+!                   p_PHY(i)%Topt = newtt(1)
+!               case(iSize)
+!                   p_PHY(i)%CDiv = exp(newtt(1))
+!               case(ialphaChl)
+!                   p_PHY(i)%LnalphaChl = newtt(1)
+!               case DEFAULT
+!                   stop "Trait index wrong!"
+!               end select
+!            ENDIF
+!         ENDDO !End of looping through Traits
+!      ENDIF !End of if (NTrait > 0)
+!   ENDIF !End of division
+!   !Calculate Eulerian concentrations of phyto C, N, and Chl, mean trait  for each layer
+!   PHYC(ipar) = PHYC(ipar) + p_PHY(i)%num *p_PHY(i)%C 
+!   PHY(ipar)  = PHY(ipar)  + p_PHY(i)%num *p_PHY(i)%N
+!   CHL(ipar)  = CHL(ipar)  + p_PHY(i)%num *p_PHY(i)%Chl
+!
+!   mCDiv_(ipar) = mCDiv_(ipar) + p_PHY(i)%num *p_PHY(i)%C * log(p_PHY(i)%Cdiv)
+!   mTopt_(ipar) = mTopt_(ipar) + p_PHY(i)%num *p_PHY(i)%C * p_PHY(i)%Topt
+!   mlnalpha_(ipar) = mlnalpha_(ipar) + p_PHY(i)%num * p_PHY(i)%C *p_PHY(i)%LnalphaChl
+!ENDDO !End of iterating over all super-individuals
+! END PIBM CODE
+
+! MAYBE CALL PIBM ROUTINE Cal_total_N OR SIMILAR HERE?
+
 
    ! Set general diagnostics, summarising particles in this cell
 
